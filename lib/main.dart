@@ -9,11 +9,11 @@ void main() async {
   // Initialize other services here if needed
   //...
   // await init();
-  runApp(const AIMeetingAssistantApp());
+  runApp(const ReevoApp());
 }
 
-class AIMeetingAssistantApp extends StatelessWidget {
-  const AIMeetingAssistantApp({super.key});
+class ReevoApp extends StatelessWidget {
+  const ReevoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
