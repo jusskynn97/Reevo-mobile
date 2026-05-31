@@ -13,4 +13,9 @@ class AppColors {
 
   static const Color brand = Color(0xFF79FFE4);
   static const Color background = Color(0xFF191919);
+
+  static const Color brandDark = Color(0xFF1A3D35);
+  static const Color surface = Color(0xFF1E1E1E);
+  static const Color surfaceLight = Color(0xFF2A2A2A);
+  static const Color error = Color(0xFFFF5252);
 }

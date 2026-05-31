@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:reevo/core/theme/color.dart';
+import 'package:reevo/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:reevo/features/notification/presentation/pages/notification_page.dart';
 
 class MainShellPage extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
@@ -10,7 +13,29 @@ class MainShellPage extends StatelessWidget {
     required this.navigationShell,
   });
 
-  void _onTap(int index) {
+  void _onTap(BuildContext context, int index) {
+    final authState = context.read<AuthBloc>().state;
+    final isLoggedIn = authState is AuthAuthenticated;
+
+    if (index == 2) {
+      // Upload button - requires authentication
+      if (!isLoggedIn) {
+        context.go('/login');
+        return;
+      }
+      // Open upload flow as full-screen modal
+      context.push('/upload');
+      return;
+    }
+
+    if (index == 3) {
+      // Inbox button - requires authentication
+      if (!isLoggedIn) {
+        context.go('/login');
+        return;
+      }
+    }
+
     navigationShell.goBranch(
       index,
       initialLocation: index == navigationShell.currentIndex,
@@ -31,7 +56,7 @@ class MainShellPage extends StatelessWidget {
           backgroundColor: AppColors.background,
           type: BottomNavigationBarType.fixed,
           currentIndex: navigationShell.currentIndex,
-          onTap: _onTap,
+          onTap: (index) => _onTap(context, index),
           selectedItemColor: Colors.white,
           unselectedItemColor: AppColors.grey3,
           showSelectedLabels: true,
@@ -78,6 +103,10 @@ class MainShellPage extends StatelessWidget {
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 4.0),
                 child: Icon(Icons.notifications_none_rounded, size: 28),
+              ),
+              activeIcon: Padding(
+                padding: EdgeInsets.only(bottom: 4.0),
+                child: Icon(Icons.notifications_rounded, size: 28),
               ),
               label: 'Inbox',
             ),

@@ -8,6 +8,7 @@ class OptimizedVideoPlayer extends StatefulWidget {
   final Duration? videoDuration;
   final bool isVisible;
   final VoidCallback? onVideoInitialized;
+  final ValueChanged<int>? onWatchReported;
 
   const OptimizedVideoPlayer({
     super.key,
@@ -16,6 +17,7 @@ class OptimizedVideoPlayer extends StatefulWidget {
     this.videoDuration,
     this.isVisible = true,
     this.onVideoInitialized,
+    this.onWatchReported,
   });
 
   @override
@@ -26,6 +28,8 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
   late VideoPlayerController _videoController;
   bool _isInitialized = false;
   bool _isPlaying = false;
+  int _watchedMs = 0;
+  Duration _lastPosition = Duration.zero;
 
   @override
   void initState() {
@@ -50,12 +54,14 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
     }
     // If visibility changed from true to false, pause video
     else if (oldWidget.isVisible && !widget.isVisible) {
+      _flushWatch();
       _videoController.pause();
       setState(() => _isPlaying = false);
     }
 
     // If video URL changed, reinitialize
     if (oldWidget.videoUrl != widget.videoUrl) {
+      _flushWatch();
       _disposeVideo();
       _initializeVideo();
     }
@@ -70,6 +76,9 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
           setState(() {
             _isInitialized = true;
           });
+          _lastPosition = Duration.zero;
+          _watchedMs = 0;
+          _videoController.addListener(_onVideoTick);
           widget.onVideoInitialized?.call();
           // Auto-play when visible
           if (widget.isVisible) {
@@ -86,8 +95,33 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
       });
   }
 
+  void _onVideoTick() {
+    if (!_isInitialized || !widget.isVisible) {
+      return;
+    }
+    final value = _videoController.value;
+    if (!value.isInitialized || !value.isPlaying) {
+      _lastPosition = value.position;
+      return;
+    }
+    final pos = value.position;
+    final delta = pos - _lastPosition;
+    if (delta.inMilliseconds > 0 && delta.inMilliseconds < 10 * 1000) {
+      _watchedMs += delta.inMilliseconds;
+    }
+    _lastPosition = pos;
+  }
+
+  void _flushWatch() {
+    if (_watchedMs > 0) {
+      widget.onWatchReported?.call(_watchedMs);
+      _watchedMs = 0;
+    }
+  }
+
   void _disposeVideo() {
     if (_isInitialized) {
+      _videoController.removeListener(_onVideoTick);
       _videoController.dispose();
       _isInitialized = false;
       _isPlaying = false;
@@ -112,6 +146,7 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
 
   @override
   void dispose() {
+    _flushWatch();
     _disposeVideo();
     super.dispose();
   }

@@ -45,7 +45,7 @@ class _FeedItemState extends State<FeedItem> with SingleTickerProviderStateMixin
           maxChildSize: 0.9,
           minChildSize: 0.4,
           builder: (context, scrollController) {
-            return const CommentsBottomSheet();
+            return CommentsBottomSheet(videoId: 'mock_${widget.index}');
           },
         );
       },

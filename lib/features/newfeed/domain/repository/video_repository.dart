@@ -7,4 +7,7 @@ abstract class VideoRepository {
     required String? cursor,
     required int limit,
   });
+  Future<Either<Failure, List<VideoEntity>>> getUserVideos({
+    required String userId,
+  });
 }

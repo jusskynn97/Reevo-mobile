@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:reevo/core/error/failure.dart';
 import 'package:reevo/features/newfeed/data/datasource/video_remote_datasource.dart';
+import 'package:reevo/features/newfeed/data/model/video_model.dart';
 import 'package:reevo/features/newfeed/domain/entity/video_entity.dart';
 import 'package:reevo/features/newfeed/domain/repository/video_repository.dart';
 
@@ -27,6 +28,20 @@ class VideoRepositoryImpl implements VideoRepository {
           ServerFailure(message: result.message),
         );
       }
+    } on Exception catch (e) {
+      return Left(
+        ServerFailure(message: e.toString()),
+      );
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<VideoEntity>>> getUserVideos({
+    required String userId,
+  }) async {
+    try {
+      final result = await remoteDataSource.getUserVideos(userId: userId);
+      return Right(result.map((VideoModel item) => item.toEntity()).toList());
     } on Exception catch (e) {
       return Left(
         ServerFailure(message: e.toString()),

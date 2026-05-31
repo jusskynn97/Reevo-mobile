@@ -8,25 +8,29 @@ class VideoModel {
   final String id;
   final String videoUrl;
   final String thumbnailUrl;
-  final String title;
   final String description;
   final String uploaderName;
   final String? uploaderAvatar;
   final String uploaderId;
   final int duration;
   final DateTime uploadedAt;
+  final int likeCount;
+  final int commentCount;
+  final bool isLiked;
 
   VideoModel({
     required this.id,
     required this.videoUrl,
     required this.thumbnailUrl,
-    required this.title,
     required this.description,
     required this.uploaderName,
     this.uploaderAvatar,
     required this.uploaderId,
     required this.duration,
     required this.uploadedAt,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.isLiked = false,
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) =>
@@ -39,13 +43,15 @@ class VideoModel {
       id: id,
       videoUrl: videoUrl,
       thumbnailUrl: thumbnailUrl,
-      title: title,
       description: description,
       uploaderName: uploaderName,
       uploaderAvatar: uploaderAvatar,
       uploaderId: uploaderId,
       duration: duration,
       uploadedAt: uploadedAt,
+      likeCount: likeCount,
+      commentCount: commentCount,
+      isLiked: isLiked,
     );
   }
 }

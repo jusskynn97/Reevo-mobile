@@ -6,6 +6,9 @@ abstract class VideoRemoteDataSource {
     required String? cursor,
     required int limit,
   });
+  Future<List<VideoModel>> getUserVideos({
+    required String userId,
+  });
 }
 
 class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
@@ -24,7 +27,7 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
   }) async {
     try {
       final Map<String, dynamic> queryParams = {
-        'limit': limit,
+        'size': limit,
       };
 
       if (cursor != null) {
@@ -32,7 +35,7 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
       }
 
       final response = await dio.get(
-        '$baseUrl/api/videos/feed',
+        '$baseUrl/api/feed/videos',
         queryParameters: queryParams,
       );
 
@@ -40,6 +43,26 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
         return VideoFeedResponseModel.fromJson(response.data as Map<String, dynamic>);
       } else {
         throw Exception('Failed to fetch video feed');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<VideoModel>> getUserVideos({
+    required String userId,
+  }) async {
+    try {
+      final response = await dio.get(
+        '$baseUrl/api/videos/user/$userId',
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> items = response.data['data'] as List<dynamic>;
+        return items.map((item) => VideoModel.fromJson(item as Map<String, dynamic>)).toList();
+      } else {
+        throw Exception('Failed to fetch user videos');
       }
     } catch (e) {
       rethrow;
