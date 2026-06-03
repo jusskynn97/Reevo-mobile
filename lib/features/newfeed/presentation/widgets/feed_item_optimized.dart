@@ -18,11 +18,19 @@ import 'package:reevo/features/interaction/presentation/bloc/interaction_state.d
 class FeedItemOptimized extends StatefulWidget {
   final VideoEntity video;
   final bool isVisible;
+  final ValueChanged<bool>? onPlayStateChanged;
+  final ValueChanged<Duration>? onPositionChanged;
+  final bool? autoPlayOnVisible;
+  final GlobalKey<OptimizedVideoPlayerState>? videoPlayerKey;
 
   const FeedItemOptimized({
     super.key,
     required this.video,
     this.isVisible = true,
+    this.onPlayStateChanged,
+    this.onPositionChanged,
+    this.autoPlayOnVisible = true,
+    this.videoPlayerKey,
   });
 
   @override
@@ -217,6 +225,7 @@ class _FeedItemOptimizedState extends State<FeedItemOptimized>
             GestureDetector(
               onDoubleTap: _handleDoubleTap,
               child: OptimizedVideoPlayer(
+                key: widget.videoPlayerKey,
                 videoUrl: widget.video.videoUrl,
                 thumbnailUrl: widget.video.thumbnailUrl,
                 videoDuration: Duration(seconds: widget.video.duration),
@@ -226,6 +235,9 @@ class _FeedItemOptimizedState extends State<FeedItemOptimized>
                     await _feedEventService.sendWatch(widget.video.id, watchMs);
                   } catch (_) {}
                 },
+                onPlayStateChanged: widget.onPlayStateChanged,
+                onPositionChanged: widget.onPositionChanged,
+                autoPlayOnVisible: widget.autoPlayOnVisible,
               ),
             ),
 

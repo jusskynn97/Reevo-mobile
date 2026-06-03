@@ -17,7 +17,7 @@ class WebSocketService {
 
     _stompClient = StompClient(
       config: StompConfig.sockJS(
-        url: 'http://10.0.2.2:8080/ws',
+        url: 'http://192.168.1.250:8080/ws',
         onConnect: (StompFrame frame) {
           _isConnected = true;
           debugPrint('WebSocket connected');
@@ -66,11 +66,45 @@ class WebSocketService {
     return controller.stream;
   }
 
+  Stream<dynamic> subscribeRaw(String destination) {
+    if (_subscriptions.containsKey(destination)) {
+      return _subscriptions[destination]!.stream;
+    }
+
+    final controller = StreamController<dynamic>.broadcast();
+    _subscriptions[destination] = controller;
+
+    _stompClient?.subscribe(
+      destination: destination,
+      callback: (StompFrame frame) {
+        try {
+          if (frame.body != null) {
+            final data = jsonDecode(frame.body!);
+            controller.add(data);
+          }
+        } catch (e) {
+          debugPrint('Error parsing WebSocket message: $e');
+        }
+      },
+    );
+
+    return controller.stream;
+  }
+
   void unsubscribe(String destination) {
     if (_subscriptions.containsKey(destination)) {
       _subscriptions[destination]?.close();
       _subscriptions.remove(destination);
     }
+  }
+
+  void send(String destination, dynamic body) {
+    final jsonBody = jsonEncode(body);
+    debugPrint('Sending WebSocket to $destination: $jsonBody');
+    _stompClient?.send(
+      destination: destination,
+      body: jsonBody,
+    );
   }
 
   void disconnect() {

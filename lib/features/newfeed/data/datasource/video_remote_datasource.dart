@@ -30,7 +30,7 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
         'size': limit,
       };
 
-      if (cursor != null) {
+      if (cursor != null && cursor.isNotEmpty) {
         queryParams['cursor'] = cursor;
       }
 
@@ -40,7 +40,11 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
       );
 
       if (response.statusCode == 200) {
-        return VideoFeedResponseModel.fromJson(response.data as Map<String, dynamic>);
+        final data = response.data as Map<String, dynamic>;
+        if (!data.containsKey('success') || !data.containsKey('message') || !data.containsKey('data')) {
+          throw const FormatException('Invalid response format');
+        }
+        return VideoFeedResponseModel.fromJson(data);
       } else {
         throw Exception('Failed to fetch video feed');
       }
@@ -59,8 +63,14 @@ class VideoRemoteDataSourceImpl implements VideoRemoteDataSource {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> items = response.data['data'] as List<dynamic>;
-        return items.map((item) => VideoModel.fromJson(item as Map<String, dynamic>)).toList();
+        final data = response.data as Map<String, dynamic>;
+        if (!data.containsKey('data')) {
+          throw const FormatException('Invalid response format');
+        }
+        final List<dynamic> items = data['data'] as List<dynamic>;
+        return items
+            .map((item) => VideoModel.fromJson(item as Map<String, dynamic>))
+            .toList();
       } else {
         throw Exception('Failed to fetch user videos');
       }

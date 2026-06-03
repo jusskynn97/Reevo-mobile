@@ -3,38 +3,84 @@ import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class OptimizedVideoPlayer extends StatefulWidget {
-  final String videoUrl;
-  final String thumbnailUrl;
+  final String? videoUrl;
+  final String? thumbnailUrl;
   final Duration? videoDuration;
   final bool isVisible;
   final VoidCallback? onVideoInitialized;
   final ValueChanged<int>? onWatchReported;
+  final ValueChanged<bool>? onPlayStateChanged;
+  final ValueChanged<Duration>? onPositionChanged;
+  final bool? autoPlayOnVisible;
 
   const OptimizedVideoPlayer({
     super.key,
-    required this.videoUrl,
-    required this.thumbnailUrl,
+    this.videoUrl,
+    this.thumbnailUrl,
     this.videoDuration,
     this.isVisible = true,
     this.onVideoInitialized,
     this.onWatchReported,
+    this.onPlayStateChanged,
+    this.onPositionChanged,
+    this.autoPlayOnVisible = true,
   });
 
   @override
-  State<OptimizedVideoPlayer> createState() => _OptimizedVideoPlayerState();
+  State<OptimizedVideoPlayer> createState() => OptimizedVideoPlayerState();
 }
 
-class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
-  late VideoPlayerController _videoController;
+class OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
+  VideoPlayerController? _videoController;
   bool _isInitialized = false;
   bool _isPlaying = false;
   int _watchedMs = 0;
   Duration _lastPosition = Duration.zero;
+  bool _isManualControl = false;
+
+  // External control methods
+  void seekTo(Duration position) {
+    if (_isInitialized && _videoController != null) {
+      _isManualControl = true;
+      _videoController!.seekTo(position).then((_) {
+        _isManualControl = false;
+      });
+    }
+  }
+
+  void play() {
+    if (_isInitialized && _videoController != null && !_isPlaying) {
+      _isManualControl = true;
+      _videoController!.play().then((_) {
+        setState(() => _isPlaying = true);
+        widget.onPlayStateChanged?.call(true);
+        _isManualControl = false;
+      });
+    }
+  }
+
+  void pause() {
+    if (_isInitialized && _videoController != null && _isPlaying) {
+      _isManualControl = true;
+      _videoController!.pause().then((_) {
+        setState(() => _isPlaying = false);
+        widget.onPlayStateChanged?.call(false);
+        _isManualControl = false;
+      });
+    }
+  }
+
+  Duration? getCurrentPosition() {
+    if (_isInitialized && _videoController != null) {
+      return _videoController!.value.position;
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.isVisible) {
+    if (widget.isVisible && widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
       _initializeVideo();
     }
   }
@@ -45,31 +91,38 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
 
     // If visibility changed from false to true, initialize video
     if (oldWidget.isVisible != widget.isVisible && widget.isVisible) {
-      if (!_isInitialized) {
+      if (!_isInitialized && widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
         _initializeVideo();
-      } else {
-        _videoController.play();
+      } else if (_isInitialized && _videoController != null && widget.autoPlayOnVisible!) {
+        _videoController!.play();
         setState(() => _isPlaying = true);
+        widget.onPlayStateChanged?.call(true);
       }
     }
     // If visibility changed from true to false, pause video
-    else if (oldWidget.isVisible && !widget.isVisible) {
+    else if (oldWidget.isVisible && !widget.isVisible && _isInitialized && _videoController != null) {
       _flushWatch();
-      _videoController.pause();
+      _videoController!.pause();
       setState(() => _isPlaying = false);
+      widget.onPlayStateChanged?.call(false);
     }
 
     // If video URL changed, reinitialize
     if (oldWidget.videoUrl != widget.videoUrl) {
       _flushWatch();
       _disposeVideo();
-      _initializeVideo();
+      if (widget.videoUrl != null && widget.videoUrl!.isNotEmpty) {
+        _initializeVideo();
+      }
     }
   }
 
   void _initializeVideo() {
+    if (widget.videoUrl == null || widget.videoUrl!.isEmpty) {
+      return;
+    }
     _videoController = VideoPlayerController.networkUrl(
-      Uri.parse(widget.videoUrl),
+      Uri.parse(widget.videoUrl!),
     )
       ..initialize().then((_) {
         if (mounted) {
@@ -78,12 +131,13 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
           });
           _lastPosition = Duration.zero;
           _watchedMs = 0;
-          _videoController.addListener(_onVideoTick);
+          _videoController!.addListener(_onVideoTick);
           widget.onVideoInitialized?.call();
           // Auto-play when visible
-          if (widget.isVisible) {
-            _videoController.play();
+          if (widget.isVisible && widget.autoPlayOnVisible!) {
+            _videoController!.play();
             setState(() => _isPlaying = true);
+            widget.onPlayStateChanged?.call(true);
           }
         }
       }).catchError((error) {
@@ -96,11 +150,20 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
   }
 
   void _onVideoTick() {
-    if (!_isInitialized || !widget.isVisible) {
+    if (!_isInitialized || !widget.isVisible || _videoController == null) {
       return;
     }
-    final value = _videoController.value;
-    if (!value.isInitialized || !value.isPlaying) {
+    final value = _videoController!.value;
+    if (!value.isInitialized) {
+      return;
+    }
+    
+    // Notify position changed
+    if (value.position != _lastPosition) {
+      widget.onPositionChanged?.call(value.position);
+    }
+    
+    if (!value.isPlaying) {
       _lastPosition = value.position;
       return;
     }
@@ -120,20 +183,21 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
   }
 
   void _disposeVideo() {
-    if (_isInitialized) {
-      _videoController.removeListener(_onVideoTick);
-      _videoController.dispose();
+    if (_isInitialized && _videoController != null) {
+      _videoController!.removeListener(_onVideoTick);
+      _videoController!.dispose();
       _isInitialized = false;
       _isPlaying = false;
     }
   }
 
   void _togglePlayPause() {
-    if (_isInitialized) {
+    if (_isInitialized && _videoController != null) {
       setState(() {
         _isPlaying = !_isPlaying;
-        _isPlaying ? _videoController.play() : _videoController.pause();
+        _isPlaying ? _videoController!.play() : _videoController!.pause();
       });
+      widget.onPlayStateChanged?.call(_isPlaying);
     }
   }
 
@@ -157,30 +221,40 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
       onTap: _togglePlayPause,
       child: Container(
         color: Colors.black,
-        child: !_isInitialized
+        child: widget.videoUrl == null || widget.videoUrl!.isEmpty
+            ? Container(
+                color: Colors.grey[900],
+                child: const Center(
+                  child: Icon(Icons.error, color: Colors.white),
+                ),
+              )
+            : !_isInitialized
             ? Stack(
                 fit: StackFit.expand,
                 children: [
                   // Thumbnail while loading
-                  CachedNetworkImage(
-                    imageUrl: widget.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[900],
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                  if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: widget.thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[900],
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
                         ),
                       ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[900],
-                      child: const Center(
-                        child: Icon(Icons.error, color: Colors.white),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[900],
+                        child: const Center(
+                          child: Icon(Icons.error, color: Colors.white),
+                        ),
                       ),
-                    ),
-                  ),
+                    )
+                  else
+                    Container(color: Colors.grey[900]),
                   // Play button
                   const Center(
                     child: Icon(
@@ -195,7 +269,7 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
                 fit: StackFit.expand,
                 children: [
                   // Video player
-                  VideoPlayer(_videoController),
+                  VideoPlayer(_videoController!),
                   // Play/Pause overlay
                   if (!_isPlaying)
                     const Center(
@@ -211,7 +285,7 @@ class _OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
                     left: 0,
                     right: 0,
                     child: VideoProgressIndicator(
-                      _videoController,
+                      _videoController!,
                       allowScrubbing: false,
                       colors: const VideoProgressColors(
                         playedColor: Colors.white,

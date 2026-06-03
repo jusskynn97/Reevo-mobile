@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:reevo/core/theme/color.dart';
 import 'package:reevo/core/di/service_locator.dart';
+import 'package:reevo/core/services/watch_room_service.dart';
+import 'package:reevo/core/services/websocket_service.dart';
 import 'package:reevo/features/newfeed/presentation/bloc/video_feed_bloc.dart';
 import 'package:reevo/features/newfeed/presentation/bloc/video_feed_event.dart';
 import 'package:reevo/features/newfeed/presentation/bloc/video_feed_state.dart';
@@ -20,6 +22,8 @@ class _NewfeedPageState extends State<NewfeedPage>
   late final PageController _pageController;
   late final AnimationController _tabAnimController;
   late final Animation<double> _tabFadeAnim;
+  final WatchRoomService _watchRoomService = getIt<WatchRoomService>();
+  final WebSocketService _webSocketService = getIt<WebSocketService>();
 
   int _currentPage = 0;
   int _activeTab = 1; // 0 = Following, 1 = For You
@@ -47,8 +51,21 @@ class _NewfeedPageState extends State<NewfeedPage>
     super.dispose();
   }
 
-  void _onPageChanged(int index) {
+  void _onPageChanged(int index, List<dynamic> videos) {
     setState(() => _currentPage = index);
+    
+    // If user is host, send video change event to all participants
+    if (_watchRoomService.isHost && _watchRoomService.currentRoom != null) {
+      final video = videos[index];
+      _webSocketService.send(
+        '/app/room/${_watchRoomService.currentRoom!.id}/video-change',
+        {
+          'videoId': video.id,
+          'videoUrl': video.videoUrl,
+          'thumbnailUrl': video.thumbnailUrl,
+        },
+      );
+    }
   }
 
   void _onTabChanged(int tab) {
@@ -94,7 +111,7 @@ class _NewfeedPageState extends State<NewfeedPage>
                   controller: _pageController,
                   scrollDirection: Axis.vertical,
                   onPageChanged: (index) {
-                    _onPageChanged(index);
+                    _onPageChanged(index, videos);
                     if (index >= videos.length - 2 &&
                         !hasReachedMax &&
                         nextCursor != null) {
@@ -106,6 +123,7 @@ class _NewfeedPageState extends State<NewfeedPage>
                     final video = videos[index];
                     final isVisible = (_currentPage - index).abs() <= 1;
                     return FeedItemOptimized(
+                      key: ValueKey(video.id),
                       video: video,
                       isVisible: isVisible,
                     );
@@ -157,6 +175,7 @@ class _NewfeedPageState extends State<NewfeedPage>
                             ),
 
                             const Spacer(),
+
 
                             // Search button
                             _IconButton(

@@ -5,29 +5,29 @@ part 'video_model.g.dart';
 
 @JsonSerializable()
 class VideoModel {
-  final String id;
-  final String videoUrl;
-  final String thumbnailUrl;
-  final String description;
-  final String uploaderName;
+  final String? id;
+  final String? videoUrl;
+  final String? thumbnailUrl;
+  final String? description;
+  final String? uploaderName;
   final String? uploaderAvatar;
-  final String uploaderId;
+  final String? uploaderId;
   final int duration;
-  final DateTime uploadedAt;
+  final DateTime? uploadedAt;
   final int likeCount;
   final int commentCount;
   final bool isLiked;
 
   VideoModel({
-    required this.id,
-    required this.videoUrl,
-    required this.thumbnailUrl,
-    required this.description,
-    required this.uploaderName,
+    this.id,
+    this.videoUrl,
+    this.thumbnailUrl,
+    this.description,
+    this.uploaderName,
     this.uploaderAvatar,
-    required this.uploaderId,
-    required this.duration,
-    required this.uploadedAt,
+    this.uploaderId,
+    this.duration = 0,
+    this.uploadedAt,
     this.likeCount = 0,
     this.commentCount = 0,
     this.isLiked = false,
@@ -40,15 +40,15 @@ class VideoModel {
 
   VideoEntity toEntity() {
     return VideoEntity(
-      id: id,
-      videoUrl: videoUrl,
-      thumbnailUrl: thumbnailUrl,
-      description: description,
-      uploaderName: uploaderName,
+      id: id ?? '',
+      videoUrl: videoUrl ?? '',
+      thumbnailUrl: thumbnailUrl ?? '',
+      description: description ?? '',
+      uploaderName: uploaderName ?? '',
       uploaderAvatar: uploaderAvatar,
-      uploaderId: uploaderId,
+      uploaderId: uploaderId ?? '',
       duration: duration,
-      uploadedAt: uploadedAt,
+      uploadedAt: uploadedAt ?? DateTime.now(),
       likeCount: likeCount,
       commentCount: commentCount,
       isLiked: isLiked,

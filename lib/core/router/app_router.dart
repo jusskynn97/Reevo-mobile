@@ -11,6 +11,8 @@ import 'package:reevo/features/notification/presentation/pages/notification_page
 import 'package:reevo/features/placeholder/presentation/pages/placeholder_page.dart';
 import 'package:reevo/features/upload/presentation/page/upload_video_page.dart';
 import 'package:reevo/features/user/presentation/pages/profile_page.dart';
+import 'package:reevo/features/watch_together/presentation/pages/discover_page.dart';
+import 'package:reevo/features/watch_together/presentation/pages/room_page.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -115,7 +117,7 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/discover',
-              builder: (context, state) => const PlaceholderPage(title: 'Discover'),
+              builder: (context, state) => const DiscoverPage(),
             ),
           ],
         ),

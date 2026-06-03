@@ -6,6 +6,7 @@ import 'package:reevo/core/services/token_interceptor.dart';
 import 'package:reevo/core/services/notification_service.dart';
 import 'package:reevo/core/services/websocket_service.dart';
 import 'package:reevo/core/services/feed_event_service.dart';
+import 'package:reevo/core/services/watch_room_service.dart';
 import 'package:reevo/features/auth/data/datasource/auth_remote_datasource.dart';
 import 'package:reevo/features/auth/data/repository/auth_repository_impl.dart';
 import 'package:reevo/features/auth/domain/repository/auth_repository.dart';
@@ -34,6 +35,11 @@ import 'package:reevo/features/notification/data/datasource/notification_remote_
 import 'package:reevo/features/notification/data/repository/notification_repository_impl.dart';
 import 'package:reevo/features/notification/domain/repository/notification_repository.dart';
 import 'package:reevo/features/notification/presentation/bloc/notification_bloc.dart';
+import 'package:reevo/features/watch_together/data/datasource/watch_together_remote_datasource.dart';
+import 'package:reevo/features/watch_together/data/repository/watch_together_repository_impl.dart';
+import 'package:reevo/features/watch_together/domain/repository/watch_together_repository.dart';
+import 'package:reevo/features/watch_together/presentation/bloc/discover_bloc.dart';
+import 'package:reevo/features/watch_together/presentation/bloc/room_bloc.dart';
 
 final getIt = GetIt.instance;
 
@@ -56,7 +62,7 @@ Future<void> setupServiceLocator() async {
   // Dio for Auth (without TokenInterceptor to avoid infinite loop)
   final authDio = Dio(
     BaseOptions(
-      baseUrl: 'http://10.0.2.2:8080',
+      baseUrl: 'http://192.168.1.250:8080',
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 10),
@@ -70,7 +76,7 @@ Future<void> setupServiceLocator() async {
   // Dio for API (with TokenInterceptor)
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://10.0.2.2:8080', 
+      baseUrl: 'http://192.168.1.250:8080', 
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 10),
@@ -80,8 +86,10 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<Dio>(dio);
 
   getIt.registerSingleton<FeedEventService>(
-    FeedEventService(dio: getIt<Dio>(), baseUrl: 'http://10.0.2.2:8080'),
+    FeedEventService(dio: getIt<Dio>(), baseUrl: 'http://192.168.1.250:8080'),
   );
+
+  getIt.registerSingleton<WatchRoomService>(WatchRoomService());
 
   // ─────────────────────────────────────────────
   // Auth Feature
@@ -91,7 +99,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<AuthRemoteDataSource>(
     AuthRemoteDataSourceImpl(
       dio: getIt<Dio>(instanceName: 'authDio'),
-      baseUrl: 'http://10.0.2.2:8080',
+      baseUrl: 'http://192.168.1.250:8080',
     ),
   );
 
@@ -145,7 +153,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<UserRemoteDataSource>(
     UserRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://10.0.2.2:8080',
+      baseUrl: 'http://192.168.1.250:8080',
     ),
   );
 
@@ -167,7 +175,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<VideoRemoteDataSource>(
     VideoRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://10.0.2.2:8080', 
+      baseUrl: 'http://192.168.1.250:8080', 
     ),
   );
 
@@ -194,7 +202,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<UploadRemoteDataSource>(
     UploadRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://10.0.2.2:8080', 
+      baseUrl: 'http://192.168.1.250:8080', 
     ),
   );
 
@@ -221,7 +229,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<InteractionRemoteDataSource>(
     InteractionRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://10.0.2.2:8080',
+      baseUrl: 'http://192.168.1.250:8080',
     ),
   );
 
@@ -274,7 +282,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<NotificationRemoteDataSource>(
     NotificationRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://10.0.2.2:8080',
+      baseUrl: 'http://192.168.1.250:8080',
     ),
   );
 
@@ -286,5 +294,31 @@ Future<void> setupServiceLocator() async {
   // BLoCs
   getIt.registerSingleton<NotificationBloc>(
     NotificationBloc(repository: getIt<NotificationRepository>()),
+  );
+
+  // ─────────────────────────────────────────────
+  // Watch Together Feature
+  // ─────────────────────────────────────────────
+
+  // Data Sources
+  getIt.registerSingleton<WatchTogetherRemoteDatasource>(
+    WatchTogetherRemoteDatasource(getIt<Dio>()),
+  );
+
+  // Repositories
+  getIt.registerSingleton<WatchTogetherRepository>(
+    WatchTogetherRepositoryImpl(getIt<WatchTogetherRemoteDatasource>()),
+  );
+
+  // Blocs
+  getIt.registerSingleton<DiscoverBloc>(
+    DiscoverBloc(getIt<WatchTogetherRepository>(), getIt<WatchRoomService>()),
+  );
+
+  getIt.registerFactory<RoomBloc>(
+    () => RoomBloc(
+      repository: getIt<WatchTogetherRepository>(),
+      webSocketService: getIt<WebSocketService>(),
+    ),
   );
 }
