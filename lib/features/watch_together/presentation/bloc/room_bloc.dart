@@ -34,6 +34,8 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
     on<ToggleMic>(_onToggleMic);
     on<ToggleChat>(_onToggleChat);
     on<ToggleParticipantsDrawer>(_onToggleParticipantsDrawer);
+    on<LeaveRoom>(_onLeaveRoom);
+    on<DeleteRoom>(_onDeleteRoom);
     on<_NewMessageReceived>(_onNewMessageReceived);
     on<_ParticipantJoined>(_onParticipantJoined);
     on<_ParticipantLeft>(_onParticipantLeft);
@@ -140,13 +142,31 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
 
   Future<void> _onChangeVideo(ChangeVideo event, Emitter<RoomState> emit) async {
     // Only host can change video, send event to server
+    final videoChangeEvent = VideoChangeEventModel(
+      videoId: event.videoId,
+      videoUrl: event.videoUrl,
+      thumbnailUrl: event.thumbnailUrl,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      userId: '',
+      username: '',
+    );
+    
+    // Cập nhật state ngay lập tức cho chủ phòng
+    if (state is RoomLoaded) {
+      final currentState = state as RoomLoaded;
+      emit(currentState.copyWith(
+        room: currentState.room.copyWith(
+          videoId: event.videoId,
+          videoUrl: event.videoUrl,
+          thumbnailUrl: event.thumbnailUrl,
+        ),
+        videoChangeEvent: videoChangeEvent,
+      ));
+    }
+    
     webSocketService.send(
       '/app/room/$currentRoomId/video-change',
-      {
-        'videoId': event.videoId,
-        'videoUrl': event.videoUrl,
-        'thumbnailUrl': event.thumbnailUrl,
-      },
+      videoChangeEvent.toJson(),
     );
   }
 
@@ -217,6 +237,24 @@ class RoomBloc extends Bloc<RoomEvent, RoomState> {
         ),
         videoChangeEvent: event.event,
       ));
+    }
+  }
+
+  Future<void> _onLeaveRoom(LeaveRoom event, Emitter<RoomState> emit) async {
+    if (currentRoomId != null) {
+      try {
+        await repository.leaveRoom(currentRoomId!);
+      } catch (e) {
+        // Handle error
+      }
+    }
+  }
+
+  Future<void> _onDeleteRoom(DeleteRoom event, Emitter<RoomState> emit) async {
+    try {
+      await repository.deleteRoom(event.roomId);
+    } catch (e) {
+      // Handle error
     }
   }
 

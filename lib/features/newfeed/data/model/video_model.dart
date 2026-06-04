@@ -17,6 +17,7 @@ class VideoModel {
   final int likeCount;
   final int commentCount;
   final bool isLiked;
+  final bool isAiGenerated;
 
   VideoModel({
     this.id,
@@ -31,6 +32,7 @@ class VideoModel {
     this.likeCount = 0,
     this.commentCount = 0,
     this.isLiked = false,
+    this.isAiGenerated = false,
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> json) =>
@@ -52,6 +54,7 @@ class VideoModel {
       likeCount: likeCount,
       commentCount: commentCount,
       isLiked: isLiked,
+      isAiGenerated: isAiGenerated,
     );
   }
 }

@@ -21,6 +21,7 @@ VideoModel _$VideoModelFromJson(Map<String, dynamic> json) => VideoModel(
   likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
   commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
   isLiked: json['isLiked'] as bool? ?? false,
+  isAiGenerated: json['isAiGenerated'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$VideoModelToJson(VideoModel instance) =>
@@ -37,6 +38,7 @@ Map<String, dynamic> _$VideoModelToJson(VideoModel instance) =>
       'likeCount': instance.likeCount,
       'commentCount': instance.commentCount,
       'isLiked': instance.isLiked,
+      'isAiGenerated': instance.isAiGenerated,
     };
 
 VideoFeedModel _$VideoFeedModelFromJson(Map<String, dynamic> json) =>

@@ -22,6 +22,8 @@ abstract class WatchTogetherRepository {
 
   Future<void> leaveRoom(String roomId);
 
+  Future<void> deleteRoom(String roomId);
+
   Future<List<RoomParticipantEntity>> getRoomParticipants(String roomId);
 
   Future<RoomMessageEntity> sendMessage({

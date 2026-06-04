@@ -57,6 +57,12 @@ class LeaveRoom extends RoomEvent {
   const LeaveRoom();
 }
 
+class DeleteRoom extends RoomEvent {
+  final String roomId;
+
+  const DeleteRoom(this.roomId);
+}
+
 class _NewMessageReceived extends RoomEvent {
   final RoomMessageEntity message;
 

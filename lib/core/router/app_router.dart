@@ -3,8 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:reevo/core/presentation/pages/main_shell_page.dart';
 import 'package:reevo/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:reevo/features/auth/presentation/pages/login_page.dart';
-import 'package:reevo/features/auth/presentation/pages/register_page.dart';
+import 'package:reevo/features/auth/presentation/pages/auth_page.dart';
 import 'package:reevo/features/newfeed/presentation/page/newfeed_page.dart';
 import 'package:reevo/features/newfeed/presentation/page/video_detail_page.dart';
 import 'package:reevo/features/notification/presentation/pages/notification_page.dart';
@@ -46,14 +45,14 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/login',
       pageBuilder: (context, state) => NoTransitionPage(
-        child: const LoginPage(),
+        child: const AuthPage(initialMode: AuthMode.login),
       ),
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/register',
       pageBuilder: (context, state) => NoTransitionPage(
-        child: const RegisterPage(),
+        child: const AuthPage(initialMode: AuthMode.register),
       ),
     ),
 
@@ -155,7 +154,7 @@ final appRouter = GoRouter(
                   );
                 }
                 return NoTransitionPage(
-                  child: const LoginPage(),
+                  child: const AuthPage(initialMode: AuthMode.login),
                 );
               },
             ),

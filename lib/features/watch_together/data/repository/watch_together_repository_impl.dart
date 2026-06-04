@@ -79,5 +79,10 @@ class WatchTogetherRepositoryImpl implements WatchTogetherRepository {
     final models = await remoteDatasource.getRoomMessages(roomId);
     return models;
   }
+
+  @override
+  Future<void> deleteRoom(String roomId) {
+    return remoteDatasource.deleteRoom(roomId);
+  }
 }
 

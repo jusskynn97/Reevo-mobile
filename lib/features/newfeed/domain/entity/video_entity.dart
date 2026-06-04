@@ -13,6 +13,7 @@ class VideoEntity extends Equatable {
   final int likeCount;
   final int commentCount;
   final bool isLiked;
+  final bool isAiGenerated;
 
   const VideoEntity({
     required this.id,
@@ -27,6 +28,7 @@ class VideoEntity extends Equatable {
     this.likeCount = 0,
     this.commentCount = 0,
     this.isLiked = false,
+    this.isAiGenerated = false,
   });
 
   VideoEntity copyWith({
@@ -42,6 +44,7 @@ class VideoEntity extends Equatable {
     int? likeCount,
     int? commentCount,
     bool? isLiked,
+    bool? isAiGenerated,
   }) {
     return VideoEntity(
       id: id ?? this.id,
@@ -56,6 +59,7 @@ class VideoEntity extends Equatable {
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,
       isLiked: isLiked ?? this.isLiked,
+      isAiGenerated: isAiGenerated ?? this.isAiGenerated,
     );
   }
 
@@ -73,6 +77,7 @@ class VideoEntity extends Equatable {
     likeCount,
     commentCount,
     isLiked,
+    isAiGenerated,
   ];
 }
 

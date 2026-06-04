@@ -83,5 +83,9 @@ class WatchTogetherRemoteDatasource {
         .map((json) => RoomMessageModel.fromJson(json))
         .toList();
   }
+
+  Future<void> deleteRoom(String roomId) async {
+    await dio.delete('/api/watch-together/rooms/$roomId');
+  }
 }
 

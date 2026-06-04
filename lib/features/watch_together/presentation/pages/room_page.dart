@@ -31,22 +31,27 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
   final WebSocketService _webSocketService = getIt<WebSocketService>();
   late final RoomBloc _roomBloc;
   late final VideoFeedBloc _videoFeedBloc;
+  final TextEditingController _chatController = TextEditingController();
 
   int _currentPage = 0;
   bool _isChatOpen = false;
   bool _isMicMuted = true;
   VideoChangeEventEntity? _lastVideoChangeEvent;
-  
+  VideoSyncEventEntity? _lastReceivedSyncEvent;
+
   // Store keys to access video players
   final Map<int, GlobalKey<OptimizedVideoPlayerState>> _videoPlayerKeys = {};
-  
+
   // Track host play state and position for sync
   bool _hostPlaying = false;
   Duration _lastSentPosition = Duration.zero;
   bool _lastSentPlaying = false;
-  
+
   // Timer to send sync events from host
   Timer? _syncTimer;
+
+  // To track if we have initial video set
+  bool _hasInitialVideo = false;
 
   @override
   void initState() {
@@ -55,7 +60,7 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
     _roomBloc = getIt<RoomBloc>();
     _videoFeedBloc = getIt<VideoFeedBloc>()..add(const FetchVideoFeedEvent());
     _roomBloc.add(InitializeRoom(widget.roomId));
-    
+
     // If we're host, start sync timer to send updates periodically
     if (_watchRoomService.isHost) {
       _startHostSync();
@@ -67,6 +72,7 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
     _pageController.dispose();
     _roomBloc.close();
     _syncTimer?.cancel();
+    _chatController.dispose();
     super.dispose();
   }
 
@@ -83,19 +89,18 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
     if (currentKey != null && currentKey.currentState != null) {
       final playerState = currentKey.currentState!;
       final position = playerState.getCurrentPosition() ?? Duration.zero;
-      
+
       // Only send if position changed by > 200ms OR playing state changed OR forced
       if (force ||
-          (position - _lastSentPosition).abs().inMilliseconds > 200) ||
-          (_hostPlaying != _lastSentPlaying) {
-        
+          (position - _lastSentPosition).abs().inMilliseconds > 200 ||
+          (_hostPlaying != _lastSentPlaying)) {
         // Send sync event via RoomBloc
         _roomBloc.add(SendVideoSync(
           type: 'sync',
           position: position.inMilliseconds,
           playing: _hostPlaying,
         ));
-        
+
         // Update last sent values
         _lastSentPosition = position;
         _lastSentPlaying = _hostPlaying;
@@ -107,17 +112,13 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
     setState(() {
       _hostPlaying = isPlaying;
     });
-    // Send sync immediately on play/pause
+    // Send sync right away
     _sendHostSyncEvent(force: true);
-  }
-
-  void _handleHostPositionChanged(Duration position) {
-    // Don't do anything here, we'll send sync on timer
   }
 
   void _onPageChanged(int index, List<VideoEntity> videos) {
     setState(() => _currentPage = index);
-    
+
     if (_watchRoomService.isHost && _watchRoomService.currentRoom != null) {
       final video = videos[index];
       _roomBloc.add(ChangeVideo(
@@ -125,25 +126,29 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
         videoUrl: video.videoUrl,
         thumbnailUrl: video.thumbnailUrl,
       ));
+      // Send sync right after changing video (wait for video to be ready)
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        _sendHostSyncEvent(force: true);
+      });
     }
   }
 
-  // Store last received sync event to avoid unnecessary actions
-  VideoSyncEventEntity? _lastReceivedSyncEvent;
-
   void _handleVideoSyncEvent(VideoSyncEventEntity syncEvent) {
+    // If we are host, ignore sync events
+    if (_watchRoomService.isHost) return;
+
     // Get the current video player key
     final currentKey = _videoPlayerKeys[_currentPage];
     if (currentKey != null && currentKey.currentState != null) {
       final playerState = currentKey.currentState!;
       final currentPosition = playerState.getCurrentPosition() ?? Duration.zero;
       final targetPosition = Duration(milliseconds: syncEvent.position);
-      
-      // Only seek if difference > 500ms to avoid micro-seeks that cause lag
+
+      // Only seek if difference > 500ms to avoid micro-seeks
       if ((currentPosition - targetPosition).abs().inMilliseconds > 500) {
         playerState.seekTo(targetPosition);
       }
-      
+
       // Handle play/pause only if state changed
       if (syncEvent.playing != null) {
         final wasPlaying = _lastReceivedSyncEvent?.playing;
@@ -155,22 +160,90 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
           }
         }
       }
-      
+
       _lastReceivedSyncEvent = syncEvent;
     }
   }
 
-  void _toggleChat() {
-    setState(() => _isChatOpen = !_isChatOpen);
+  // Handle video change: find video, jump to it, and sync
+  void _handleVideoChange(VideoChangeEventEntity videoChangeEvent) {
+    // Check if we already processed this exact event
+    if (_lastVideoChangeEvent != null &&
+        _lastVideoChangeEvent!.videoId == videoChangeEvent.videoId &&
+        _lastVideoChangeEvent!.timestamp == videoChangeEvent.timestamp) {
+      return; // Skip duplicate
+    }
+
+    _lastVideoChangeEvent = videoChangeEvent;
+
+    // If we are host, do nothing special
+    if (_watchRoomService.isHost) return;
+
+    // Try to find the video in the current feed
+    final currentFeedState = _videoFeedBloc.state;
+    if (currentFeedState is VideoFeedSuccess) {
+      final videoIndex = currentFeedState.videos.indexWhere(
+        (video) => video.id == videoChangeEvent.videoId,
+      );
+
+      if (videoIndex != -1) {
+        setState(() {
+          _currentPage = videoIndex;
+        });
+        _pageController.jumpToPage(videoIndex);
+
+        // Reset sync state for new video
+        _lastReceivedSyncEvent = null;
+
+        // Wait for video to initialize and then sync
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          final currentKey = _videoPlayerKeys[_currentPage];
+          if (currentKey != null && currentKey.currentState != null) {
+            final playerState = currentKey.currentState!;
+
+            // If we have a sync event, use it
+            final currentState = _roomBloc.state;
+            if (currentState is RoomLoaded && currentState.videoSyncEvent != null) {
+              final targetPosition = Duration(milliseconds: currentState.videoSyncEvent!.position);
+              final shouldPlay = currentState.videoSyncEvent!.playing ?? true;
+              playerState.forceSyncAndPlay(targetPosition, shouldPlay);
+              _lastReceivedSyncEvent = currentState.videoSyncEvent;
+            } else {
+              // If no sync event yet, just play from beginning
+              playerState.play();
+            }
+          }
+        });
+      }
+    }
   }
 
-  void _toggleMic() {
-    setState(() => _isMicMuted = !_isMicMuted);
+  // When a new participant joins, host should send full sync
+  void _handleParticipantJoined() {
+    if (_watchRoomService.isHost) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _sendHostSyncEvent(force: true);
+      });
+    }
   }
 
-  void _leaveRoom() {
+  void _sendMessage() {
+    if (_chatController.text.trim().isEmpty) return;
+    
+    _roomBloc.add(SendMessage(_chatController.text.trim()));
+    _chatController.clear();
+  }
+
+  Future<void> _leaveRoom() async {
+    if (_watchRoomService.isHost) {
+      // If host, delete room
+      _roomBloc.add(DeleteRoom(widget.roomId));
+    } else {
+      // If guest, just leave
+      _roomBloc.add(const LeaveRoom());
+    }
+    
     _watchRoomService.leaveRoom();
-    _roomBloc.add(LeaveRoom());
     Navigator.of(context).pop();
   }
 
@@ -249,39 +322,28 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
         listeners: [
           BlocListener<RoomBloc, RoomState>(
             bloc: _roomBloc,
-            listenWhen: (previous, current) {
-              return current is RoomLoaded && 
-                  (previous is! RoomLoaded || 
-                  (current as RoomLoaded).videoChangeEvent != 
-                  (previous as RoomLoaded).videoChangeEvent ||
-                  (current as RoomLoaded).videoSyncEvent != 
-                  (previous as RoomLoaded).videoSyncEvent);
-            },
             listener: (context, state) {
               if (state is RoomLoaded) {
-                // Handle video change event
-                if (state.videoChangeEvent != null) {
-                  // If we are not the host, handle the video change!
-                  if (!_watchRoomService.isHost) {
-                    // Try to find the video in the current feed and jump to it!
-                    final currentFeedState = _videoFeedBloc.state;
-                    if (currentFeedState is VideoFeedSuccess) {
-                      final videoIndex = currentFeedState.videos.indexWhere(
-                        (video) => video.id == state.videoChangeEvent!.videoId,
-                      );
-                      if (videoIndex != -1) {
-                        _pageController.jumpToPage(videoIndex);
-                        setState(() => _currentPage = videoIndex);
-                      }
-                    }
-                  }
-                  // Save last event for later
-                  _lastVideoChangeEvent = state.videoChangeEvent;
+                // Handle initial video when room first loads
+                if (!_hasInitialVideo && state.videoChangeEvent != null) {
+                  _hasInitialVideo = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _handleVideoChange(state.videoChangeEvent!);
+                  });
                 }
-                
-                // Handle video sync event
-                if (state.videoSyncEvent != null && !_watchRoomService.isHost) {
-                  _handleVideoSyncEvent(state.videoSyncEvent!);
+
+                // Handle video change every time videoChangeEvent is present
+                if (state.videoChangeEvent != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _handleVideoChange(state.videoChangeEvent!);
+                  });
+                }
+
+                // Handle video sync every time videoSyncEvent is present
+                if (state.videoSyncEvent != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _handleVideoSyncEvent(state.videoSyncEvent!);
+                  });
                 }
               }
             },
@@ -290,12 +352,16 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
         child: BlocBuilder<VideoFeedBloc, VideoFeedState>(
           bloc: _videoFeedBloc,
           builder: (context, feedState) {
-            if (feedState is VideoFeedInitial || feedState is VideoFeedLoading) {
+            if (feedState is VideoFeedInitial ||
+                feedState is VideoFeedLoading) {
               return _buildLoadingState();
-            } else if (feedState is VideoFeedSuccess || feedState is VideoFeedLoadingMore) {
-              final videos = feedState is VideoFeedSuccess ? feedState.videos : (feedState as VideoFeedLoadingMore).videos;
+            } else if (feedState is VideoFeedSuccess ||
+                feedState is VideoFeedLoadingMore) {
+              final videos = feedState is VideoFeedSuccess
+                  ? feedState.videos
+                  : (feedState as VideoFeedLoadingMore).videos;
               final isLoadingMore = feedState is VideoFeedLoadingMore;
-              
+
               return Stack(
                 fit: StackFit.expand,
                 children: [
@@ -303,8 +369,8 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                   PageView.builder(
                     controller: _pageController,
                     scrollDirection: Axis.vertical,
-                    physics: _watchRoomService.isHost 
-                        ? const PageScrollPhysics() 
+                    physics: _watchRoomService.isHost
+                        ? const PageScrollPhysics()
                         : const NeverScrollableScrollPhysics(),
                     onPageChanged: (index) {
                       _onPageChanged(index, videos);
@@ -313,12 +379,14 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                     itemBuilder: (context, index) {
                       // Create or get the key for this video
                       if (!_videoPlayerKeys.containsKey(index)) {
-                        _videoPlayerKeys[index] = GlobalKey<OptimizedVideoPlayerState>();
+                        _videoPlayerKeys[index] =
+                            GlobalKey<OptimizedVideoPlayerState>();
                       }
-                      
+
                       final video = videos[index];
-                      final isVisible = (_currentPage - index).abs() <= 1;
-                      
+                      final isVisible =
+                          (_currentPage - index).abs() <= 1;
+
                       return FeedItemOptimized(
                         key: ValueKey(video.id),
                         video: video,
@@ -330,128 +398,186 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                             _handleHostPlayStateChanged(isPlaying);
                           }
                         },
-                        onPositionChanged: (position) {
-                          if (_watchRoomService.isHost) {
-                            _handleHostPositionChanged(position);
-                          }
-                        },
                       );
                     },
                   ),
 
                   // Top Bar
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Back Button
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Back Button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.arrow_back,
+                                    color: Colors.white, size: 24),
+                                onPressed: _leaveRoom,
+                              ),
                             ),
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                              onPressed: _leaveRoom,
-                            ),
-                          ),
 
-                          // Room Name
-                          BlocBuilder<RoomBloc, RoomState>(
-                            bloc: _roomBloc,
-                            builder: (context, state) {
-                              String roomName = 'Loading...';
-                              if (state is RoomLoaded) {
-                                final roomLoadedState = state;
-                                roomName = roomLoadedState.room.name;
-                              }
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.brand,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  roomName,
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                            // Room Name
+                            BlocBuilder<RoomBloc, RoomState>(
+                              bloc: _roomBloc,
+                              builder: (context, state) {
+                                String roomName = 'Loading...';
+                                if (state is RoomLoaded) {
+                                  final roomLoadedState = state;
+                                  roomName = roomLoadedState.room.name;
+                                }
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brand,
+                                    borderRadius: BorderRadius.circular(20),
                                   ),
-                                ),
-                              );
+                                  child: Text(
+                                    roomName,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+
+                            // Participants Button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.people,
+                                    color: Colors.white, size: 24),
+                                onPressed: _openParticipants,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Right Controls (when chat is closed)
+                  if (!_isChatOpen)
+                    Positioned(
+                      right: 16,
+                      bottom: 100,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Chat Button
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _isChatOpen = true);
                             },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.chat_bubble_outline,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
                           ),
 
-                          // Participants Button
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: IconButton(
-                              icon: const Icon(Icons.people, color: Colors.white, size: 24),
-                              onPressed: _openParticipants,
+                          const SizedBox(height: 20),
+
+                          // Mic Button
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _isMicMuted = !_isMicMuted);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _isMicMuted
+                                    ? Colors.black.withOpacity(0.6)
+                                    : AppColors.brand,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _isMicMuted ? Icons.mic_off : Icons.mic,
+                                color: _isMicMuted ? Colors.white : Colors.black,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
 
-                  // Bottom Right Controls
-                  Positioned(
-                    right: 16,
-                    bottom: 120,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Chat Button
-                        GestureDetector(
-                          onTap: _toggleChat,
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.chat_bubble_outline,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                  // Bottom Chat Input (when chat is closed)
+                  if (!_isChatOpen)
+                    Positioned(
+                      left: 16,
+                      right: 80,
+                      bottom: 100,
+                      child: SafeArea(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _chatController,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Type a message...',
+                                    hintStyle: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 14,
+                                    ),
+                                    contentPadding:
+                                        EdgeInsets.symmetric(horizontal: 16),
+                                    border: InputBorder.none,
+                                  ),
+                                  onSubmitted: (_) => _sendMessage(),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.send, color: AppColors.brand),
+                                onPressed: _sendMessage,
+                              ),
+                            ],
                           ),
                         ),
-
-                        const SizedBox(height: 20),
-
-                        // Mic Button
-                        GestureDetector(
-                          onTap: _toggleMic,
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _isMicMuted ? Colors.black.withOpacity(0.6) : AppColors.brand,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              _isMicMuted ? Icons.mic_off : Icons.mic,
-                              color: _isMicMuted ? Colors.white : Colors.black,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
 
                   // Chat Overlay
                   if (_isChatOpen) ...[
                     Positioned.fill(
                       child: GestureDetector(
-                        onTap: _toggleChat,
+                        onTap: () {
+                          setState(() => _isChatOpen = false);
+                        },
                         child: Container(
                           color: Colors.black.withOpacity(0.5),
                         ),
@@ -465,7 +591,8 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                       child: Container(
                         decoration: BoxDecoration(
                           color: AppColors.background,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20)),
                         ),
                         child: BlocBuilder<RoomBloc, RoomState>(
                           bloc: _roomBloc,
@@ -495,32 +622,42 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                                   const SizedBox(height: 16),
                                   Expanded(
                                     child: ListView.builder(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16),
                                       itemCount: roomLoadedState.messages.length,
                                       itemBuilder: (context, index) {
-                                        final message = roomLoadedState.messages[index];
+                                        final message =
+                                            roomLoadedState.messages[index];
                                         return Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 8),
                                           child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               CircleAvatar(
                                                 radius: 18,
-                                                backgroundImage: message.senderAvatarUrl != null
-                                                    ? NetworkImage(message.senderAvatarUrl!)
-                                                    : null,
-                                                backgroundColor: AppColors.surfaceLight,
+                                                backgroundImage:
+                                                    message.senderAvatarUrl !=
+                                                            null
+                                                        ? NetworkImage(message
+                                                            .senderAvatarUrl!)
+                                                        : null,
+                                                backgroundColor:
+                                                    AppColors.surfaceLight,
                                               ),
                                               const SizedBox(width: 12),
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       message.senderUsername,
                                                       style: const TextStyle(
                                                         color: Colors.white,
-                                                        fontWeight: FontWeight.w600,
+                                                        fontWeight:
+                                                            FontWeight.w600,
                                                         fontSize: 13,
                                                       ),
                                                     ),
@@ -541,10 +678,51 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                                       },
                                     ),
                                   ),
+                                  // Chat Input in overlay
+                                  Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _chatController,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                              ),
+                                              decoration: const InputDecoration(
+                                                hintText: 'Type a message...',
+                                                hintStyle: TextStyle(
+                                                  color: Colors.white54,
+                                                  fontSize: 14,
+                                                ),
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                        horizontal: 16),
+                                                border: InputBorder.none,
+                                              ),
+                                              onSubmitted: (_) => _sendMessage(),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.send,
+                                                color: AppColors.brand),
+                                            onPressed: _sendMessage,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               );
                             }
-                            return const Center(child: CircularProgressIndicator());
+                            return const Center(
+                                child: CircularProgressIndicator());
                           },
                         ),
                       ),
@@ -554,12 +732,13 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
                   // Loading More Indicator
                   if (isLoadingMore)
                     Positioned(
-                      bottom: 100,
+                      bottom: 200,
                       left: 0,
                       right: 0,
                       child: Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.6),
                             borderRadius: BorderRadius.circular(20),
@@ -666,3 +845,4 @@ class _RoomPageState extends State<RoomPage> with TickerProviderStateMixin {
     );
   }
 }
+

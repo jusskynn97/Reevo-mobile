@@ -62,7 +62,7 @@ Future<void> setupServiceLocator() async {
   // Dio for Auth (without TokenInterceptor to avoid infinite loop)
   final authDio = Dio(
     BaseOptions(
-      baseUrl: 'http://192.168.1.250:8080',
+      baseUrl: 'http://172.26.25.53:8080',
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 10),
@@ -76,7 +76,7 @@ Future<void> setupServiceLocator() async {
   // Dio for API (with TokenInterceptor)
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://192.168.1.250:8080', 
+      baseUrl: 'http://172.26.25.53:8080', 
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       sendTimeout: const Duration(seconds: 10),
@@ -86,7 +86,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<Dio>(dio);
 
   getIt.registerSingleton<FeedEventService>(
-    FeedEventService(dio: getIt<Dio>(), baseUrl: 'http://192.168.1.250:8080'),
+    FeedEventService(dio: getIt<Dio>(), baseUrl: 'http://172.26.25.53:8080'),
   );
 
   getIt.registerSingleton<WatchRoomService>(WatchRoomService());
@@ -99,7 +99,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<AuthRemoteDataSource>(
     AuthRemoteDataSourceImpl(
       dio: getIt<Dio>(instanceName: 'authDio'),
-      baseUrl: 'http://192.168.1.250:8080',
+      baseUrl: 'http://172.26.25.53:8080',
     ),
   );
 
@@ -153,7 +153,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<UserRemoteDataSource>(
     UserRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://192.168.1.250:8080',
+      baseUrl: 'http://172.26.25.53:8080',
     ),
   );
 
@@ -175,7 +175,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<VideoRemoteDataSource>(
     VideoRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://192.168.1.250:8080', 
+      baseUrl: 'http://172.26.25.53:8080', 
     ),
   );
 
@@ -202,7 +202,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<UploadRemoteDataSource>(
     UploadRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://192.168.1.250:8080', 
+      baseUrl: 'http://172.26.25.53:8080', 
     ),
   );
 
@@ -229,7 +229,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<InteractionRemoteDataSource>(
     InteractionRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://192.168.1.250:8080',
+      baseUrl: 'http://172.26.25.53:8080',
     ),
   );
 
@@ -282,7 +282,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<NotificationRemoteDataSource>(
     NotificationRemoteDataSourceImpl(
       dio: getIt<Dio>(),
-      baseUrl: 'http://192.168.1.250:8080',
+      baseUrl: 'http://172.26.25.53:8080',
     ),
   );
 

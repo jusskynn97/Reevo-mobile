@@ -70,6 +70,31 @@ class OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
     }
   }
 
+  // Sync method to force seek and play/pause immediately, used when visibility changes
+  Future<void> forceSyncAndPlay(Duration position, bool shouldPlay) async {
+    if (_videoController == null) return;
+    
+    // Wait for initialization if not done yet
+    if (!_isInitialized) {
+      await _videoController!.initialize();
+      if (!mounted) return;
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+    
+    await _videoController!.seekTo(position);
+    if (shouldPlay) {
+      _videoController!.play();
+      setState(() => _isPlaying = true);
+      widget.onPlayStateChanged?.call(true);
+    } else {
+      _videoController!.pause();
+      setState(() => _isPlaying = false);
+      widget.onPlayStateChanged?.call(false);
+    }
+  }
+
   Duration? getCurrentPosition() {
     if (_isInitialized && _videoController != null) {
       return _videoController!.value.position;
@@ -123,7 +148,12 @@ class OptimizedVideoPlayerState extends State<OptimizedVideoPlayer> {
     }
     _videoController = VideoPlayerController.networkUrl(
       Uri.parse(widget.videoUrl!),
+      // Cấu hình cải thiện bộ đệm để chạy mượt hơn
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: false, // Không trộn âm thanh với app khác
+      ),
     )
+      ..setLooping(true) // Tự động lặp video khi kết thúc
       ..initialize().then((_) {
         if (mounted) {
           setState(() {
