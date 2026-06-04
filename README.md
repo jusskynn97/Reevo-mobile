@@ -9,18 +9,13 @@ Cross-platform mobile application for Reevo, built with Flutter.
 Here are some screenshots of the app in action:
 
 ### Home & Authentication
-| Calendar Screen | Create Meeting Schedule |
+| Newfeed | Watch Together |
 |--------------|----------------|
-| <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture1.png" width="300"/> | <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture2.png" width="300"/> |
+| <img src="https://raw.githubusercontent.com/jusskynn97/Reevo-mobile/refs/heads/main/demo_images/Picture1.png" width="300"/> | <img src="https://raw.githubusercontent.com/jusskynn97/Reevo-mobile/refs/heads/main/demo_images/Picture2.png" width="300"/> |
 
-### Meeting Features
-| Meeting Summary | Meeting Transcription |
-|----------------|--------------|
-| <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture3.png" width="300"/> | <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture4.png" width="300"/> |
-
-| Notification | RAG Chatbot |
+| Notification | Profile |
 |-----------------|-------------|
-| <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture6.png" width="300"/> | <img src="https://raw.githubusercontent.com/jusskynn97/MeetyMind/refs/heads/main/demo_images/Picture5.png" width="300"/> |
+| <img src="https://raw.githubusercontent.com/jusskynn97/Reevo-mobile/refs/heads/main/demo_images/Picture3.png" width="300"/> | <img src="https://raw.githubusercontent.com/jusskynn97/Reevo-mobile/refs/heads/main/demo_images/Picture4.png" width="300"/> |
 
 
 ## 🛠️ Tech Stack
